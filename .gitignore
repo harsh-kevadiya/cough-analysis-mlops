@@ -1,0 +1,31 @@
+# --- Project Specific ---
+# Ignore the 18GB dataset folder
+data/
+datasets/
+*.wav
+*.mp3
+*.zip
+*.tar.gz
+
+# --- Python & ML ---
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.pytest_cache/
+# Keep your model, but ignore massive checkponts if they are >100MB
+# models/*.h5 
+
+# --- Docker ---
+.docker/
+
+# --- OS Specific ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+Thumbs.db

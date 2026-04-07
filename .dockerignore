@@ -1,0 +1,20 @@
+# Block the 8GB data folder and the zip
+data/
+./data
+covid19-cough-audio-classification.zip
+
+# Block the 1.7GB virtual environment
+venv/
+.venv/
+bin/
+lib/
+include/
+
+# Block OS and Git metadata
+.git/
+.DS_Store
+__pycache__/
+*.pyc
+
+# Block Notebooks
+notebooks/
