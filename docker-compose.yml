@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  analysis-app:
+    build: .
+    volumes:
+      # This links your local data folder to the container's data folder
+      - ./datasets:/app/datasets 
+      - ./models:/app/models
+    environment:
+      - MODEL_PATH=/app/models/best_cnn_model.h5
+      - DATA_PATH=/app/datasets/coughvid
+    ports:
+      - "8000:8000"

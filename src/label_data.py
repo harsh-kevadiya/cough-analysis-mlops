@@ -1,58 +1,62 @@
 import os
-import json
 import pandas as pd
 
-RAW_DIR = "data/raw"
+# Update these paths to match your folder structure
+METADATA_CSV = "data/raw/metadata_compiled.csv" 
 AUDIO_DIR = "data/processed/audio_wav"
 
 data = []
+skipped_no_audio = 0
+skipped_low_quality = 0
+skipped_unknown_status = 0
 
-count = 0
-skipped = 0
+print("🔍 Extracting labels from your custom CSV...")
 
-for file in os.listdir(RAW_DIR):
-    if file.endswith(".json"):
-        json_path = os.path.join(RAW_DIR, file)
+if not os.path.exists(METADATA_CSV):
+    print(f"❌ ERROR: {METADATA_CSV} not found!")
+else:
+    # We read it without assuming names if the header is messy
+    df_master = pd.read_csv(METADATA_CSV)
+    
+    # Standardizing column names based on your paste
+    # We assume: Col 0 = UUID, Col 2 = cough_detected, Col 7 = status
+    # But it's safer to use the names if they exist:
+    uuid_col = 'uuid' if 'uuid' in df_master.columns else df_master.columns[0]
+    score_col = 'cough_detected' if 'cough_detected' in df_master.columns else df_master.columns[2]
+    status_col = 'status' if 'status' in df_master.columns else df_master.columns[7]
 
-        try:
-            with open(json_path, "r") as f:
-                metadata = json.load(f)
+    for _, row in df_master.iterrows():
+        uuid = row[uuid_col]
+        audio_path = os.path.join(AUDIO_DIR, f"{uuid}.wav")
 
-            audio_filename = file.replace(".json", ".wav")
-            audio_path = os.path.join(AUDIO_DIR, audio_filename)
+        # 1. Quality Filter: Must be > 0.8
+        if row[score_col] < 0.8:
+            skipped_low_quality += 1
+            continue
 
-            if not os.path.exists(audio_path):
-                skipped += 1
-                continue
+        # 2. Check if file exists
+        if not os.path.exists(audio_path):
+            skipped_no_audio += 1
+            continue
 
-            status = metadata.get("status", "unknown")
+        # 3. Mapping your 'status' column
+        status = str(row[status_col]).lower()
+        if status == 'healthy':
+            label = 0
+        elif 'symptomatic' in status or 'covid' in status:
+            label = 1
+        else:
+            skipped_unknown_status += 1
+            continue
 
-            if status == "healthy":
-                label = 0   # Healthy
-            elif status == "symptomatic":
-                label = 1   # COVID / respiratory issue
-            else:
-                skipped += 1
-                continue
+        data.append({"file_path": audio_path, "label": label})
 
-            data.append({
-                "file_path": audio_path,
-                "label": label
-            })
-
-            count += 1
-
-        except:
-            skipped += 1
-
-df = pd.DataFrame(data)
-
-os.makedirs("data/processed", exist_ok=True)
-df.to_csv("data/processed/labels.csv", index=False)
-
-print("✅ Labels created successfully!")
-print(f"📊 Total samples: {len(df)}")
-print(f"⚠️ Skipped files: {skipped}")
-
-print("\n📊 Label Distribution:\n")
-print(df["label"].value_counts())
+    if data:
+        df = pd.DataFrame(data)
+        os.makedirs("data/processed", exist_ok=True)
+        df.to_csv("data/processed/labels.csv", index=False)
+        print(f"✅ Success! Created labels.csv with {len(df)} samples.")
+        print(f"📊 Distribution -> Healthy: {len(df[df.label==0])} | Sick: {len(df[df.label==1])}")
+        print(f"⚠️ Debug -> Low Quality: {skipped_low_quality} | Missing Audio: {skipped_no_audio}")
+    else:
+        print("❌ No matches found! Ensure WAV filenames match the UUIDs in column 1.")

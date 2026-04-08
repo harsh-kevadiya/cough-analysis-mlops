@@ -1,87 +1,49 @@
 import numpy as np
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization, Input
-from tensorflow.keras.callbacks import EarlyStopping
+import tensorflow as tf
+from tensorflow.keras import layers, models
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.utils import class_weight
+import os
 
-# Load features
-X = np.load("data/processed/features/x.npy")
+# 1. Load Data
+X = np.load("data/processed/features/X.npy")
 y = np.load("data/processed/features/y.npy")
 
-print("📊 Loaded X shape:", X.shape)
+# Force 4D Shape (Samples, 64, 80, 3)
+if len(X.shape) == 3:
+    X = X.reshape(-1, 64, 80, 3)
 
-# 🔥 STEP 1: FIX DATA SCALE (VERY IMPORTANT)
-# Flatten for scaling
-n_samples, h, w = X.shape
-X = X.reshape(n_samples, -1)
+print(f"📊 Training with data shape: {X.shape}")
 
-scaler = StandardScaler()
-X = scaler.fit_transform(X)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
-# Reshape back
-X = X.reshape(n_samples, h, w, 1)
-
-# 🔥 STEP 2: TRAIN-TEST SPLIT
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
-)
-
-print("Train shape:", X_train.shape)
-
-# 🔥 STEP 3: IMPROVED CNN (STABLE)
-model = Sequential([
-    Input(shape=(h, w, 1)),
-
-    Conv2D(32, (3,3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2,2),
-
-    Conv2D(64, (3,3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2,2),
-
-    Conv2D(128, (3,3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2,2),
-
-    Flatten(),
-
-    Dense(128, activation='relu'),
-    Dropout(0.5),
-
-    Dense(1, activation='sigmoid')  # 🔥 binary classification
+# 2. Build Model with EXPLICIT 3-channel input
+model = models.Sequential([
+    layers.Input(shape=(64, 80, 3)), # <--- THE 3 CHANNELS
+    layers.Conv2D(32, (3, 3), padding='same', activation='relu'),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
+    
+    layers.Conv2D(64, (3, 3), padding='same', activation='relu'),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
+    
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(1, activation='sigmoid')
 ])
 
-# 🔥 STEP 4: CORRECT LOSS FUNCTION
-model.compile(
-    optimizer='adam',
-    loss='binary_crossentropy',
-    metrics=['accuracy']
-)
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0005), 
+              loss='binary_crossentropy', 
+              metrics=['accuracy'])
 
-model.summary()
+# 3. Class Weights (The 'Guessing' Fix)
+weights = class_weight.compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
+cw = {0: weights[0], 1: weights[1]}
 
-# 🔥 STEP 5: EARLY STOPPING (PREVENT OVERFIT)
-early_stop = EarlyStopping(
-    monitor='val_loss',
-    patience=3,
-    restore_best_weights=True
-)
-
-# 🔥 STEP 6: TRAIN
-history = model.fit(
-    X_train, y_train,
-    epochs=20,
-    batch_size=32,
-    validation_data=(X_test, y_test),
-    callbacks=[early_stop]
-)
-
-# 🔥 STEP 7: EVALUATE
-loss, acc = model.evaluate(X_test, y_test)
-print(f"✅ Test Accuracy: {acc * 100:.2f}%")
-
-# Save model
+# 4. Fit & Save
+os.makedirs("models", exist_ok=True)
+model.fit(X_train, y_train, epochs=30, batch_size=32, validation_data=(X_test, y_test), class_weight=cw)
 model.save("models/cough_model.keras")
-print("💾 Model saved!")
+print("✅ New 3-channel model saved successfully.")
