@@ -1,32 +1,35 @@
-# 🫁 AI-Driven Respiratory Health Analysis
+# 🫁 Respiratory Health Analysis System
+**A Deep Learning & MLOps Framework for Diagnostic Screening**
 
-An end-to-end Machine Learning system designed to classify respiratory health from cough sounds using a **Bottleneck Convolutional Neural Network**. This project integrates signal processing, deep learning, and MLOps best practices.
+This project demonstrates a production-ready Machine Learning pipeline developed on macOS, utilizing **Bottleneck CNN architectures** to classify symptomatic respiratory patterns from raw audio.
 
-## 🏗️ Project Architecture
-The system follows a modular architecture:
-1. **Signal Processing:** Feature extraction using Mel-Frequency Cepstral Coefficients (MFCCs) and 3-channel Spectrograms (Static, Delta, Delta-Delta).
-2. **Deep Learning:** A custom Bottleneck CNN with Global Average Pooling to minimize environmental noise overfitting.
-3. **API Layer:** FastAPI service for real-time inference.
-4. **MLOps:** Containerization with Docker and automated CI/CD via GitHub Actions.
+## 🚀 Key Engineering Highlights
+- **Architecture:** Custom 3-layer CNN with **Global Average Pooling** to mitigate environmental noise bias.
+- **Feature Engineering:** 3-Channel Spectrogram extraction (Static + Delta + Delta-Delta) to capture acoustic transients.
+- **Production Layer:** Fully functional **FastAPI** backend for real-time inference.
+- **Reliability:** Integrated **EarlyStopping** and **ReduceLROnPlateau** callbacks to ensure optimal model convergence.
 
-## 📊 Performance & Results
+## 🛠️ System Components
+- **Inference Engine:** FastAPI (`/predict` endpoint)
+- **Signal Processing:** Librosa-based feature pipeline
+- **Model Storage:** Keras H5/SavedModel format with synced scaling parameters
+- **CI/CD:** GitHub Actions for automated build verification
 
-### Confusion Matrix
+## 📊 Visual Analytics
+
+### Model Confusion Matrix
 ![Confusion Matrix](reports/confusion_matrix.png)
-*Our model achieves a balanced sensitivity, prioritizing the recall of symptomatic cases.*
+*Insight: Focused on maximizing Recall for symptomatic cases to serve as an effective screening tool.*
 
-### Feature Visualization
+### Multi-Channel Feature Map
 ![Feature Visualization](reports/feature_deep_dive.png)
-*Visual representation of the 3-channel input: Mel Spectrogram, Delta, and Delta-Delta.*
+*Technical Detail: Uses 64 Mel-bands with a hop length optimized for 1-second audio windows.*
 
-## 📂 Project Structure
+## 📂 Local Workspace Structure
 ```text
 .
-├── api/                # FastAPI implementation (main.py)
-├── data/               # Processed features and datasets
-├── models/             # Saved model artifacts (.keras) and scaling params
-├── reports/            # Generated performance plots
-├── src/                # Source code (training, evaluation, visualization)
-├── .github/workflows/  # CI/CD pipeline definitions
-├── Dockerfile          # Container configuration
-└── requirements.txt    # Project dependencies
+├── api/                # FastAPI Production Code
+├── src/                # Training & Evaluation Logic
+├── models/             # Optimized Weights & Scaling Params
+├── reports/            # Performance Visualizations
+└── .github/            # Automated MLOps Workflows
