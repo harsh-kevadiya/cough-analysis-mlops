@@ -1,65 +1,76 @@
-import numpy as np
-import librosa
-from fastapi import FastAPI, UploadFile, File
-from tensorflow.keras.models import load_model
-import uvicorn
 import os
+import librosa
+import numpy as np
+import tensorflow as tf
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(title="Respiratory Analysis API")
 
-# Load model
-model = load_model("models/cough_model.keras")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Prediction function
-def extract_features(file_path):
-    signal, sr = librosa.load(file_path, sr=16000)
+# Load the model once
+MODEL_PATH = "models/cough_model.keras"
+model = tf.keras.models.load_model(MODEL_PATH)
 
-    if np.max(np.abs(signal)) > 0:
-        signal = signal / np.max(np.abs(signal))
-
-    mfcc = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=40)
-
-    max_len = 128
-    if mfcc.shape[1] < max_len:
-        pad_width = max_len - mfcc.shape[1]
-        mfcc = np.pad(mfcc, ((0, 0), (0, pad_width)))
+def extract_api_features(audio_path):
+    """Ensures output is ALWAYS (1, 64, 80, 3)"""
+    y, sr = librosa.load(audio_path, sr=16000, duration=1.0)
+    
+    # Standardize audio length to 1 second
+    if len(y) < 16000:
+        y = np.pad(y, (0, 16000 - len(y)))
     else:
-        mfcc = mfcc[:, :max_len]
+        y = y[:16000]
+    
+    # Extract Mel Spectrogram
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=64, n_fft=1024, hop_length=201)
+    mel_db = librosa.power_to_db(mel, ref=np.max)
+    
+    # Calculate Deltas
+    delta = librosa.feature.delta(mel_db)
+    delta2 = librosa.feature.delta(mel_db, order=2)
+    
+    # Stack into 3 channels
+    features = np.stack([mel_db, delta, delta2], axis=-1)
+    
+    # FORCE SHAPE to exactly 80 time steps
+    if features.shape[1] > 80:
+        features = features[:, :80, :]
+    elif features.shape[1] < 80:
+        pad_width = 80 - features.shape[1]
+        features = np.pad(features, ((0,0), (0, pad_width), (0,0)), mode='constant')
 
-    return mfcc.reshape(1, 40, 128, 1)
-
-
-@app.get("/")
-def home():
-    return {"message": "Cough Analysis API Running 🚀"}
-
+    return features.reshape(1, 64, 80, 3)
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    file_location = f"temp_{file.filename}"
-
-    with open(file_location, "wb") as f:
-        f.write(await file.read())
-
-    features = extract_features(file_location)
-
-    prediction = model.predict(features)
-    predicted_class = np.argmax(prediction)
-
-    os.remove(file_location)
-
-    if predicted_class == 0:
-        result = "Healthy"
-    else:
-        result = "Respiratory Issue"
-
-    return {
-        "prediction": result,
-        "confidence": float(np.max(prediction))
-    }
-
+    temp_path = f"temp_{file.filename}"
+    try:
+        with open(temp_path, "wb") as buffer:
+            buffer.write(await file.read())
+        
+        # Inference
+        processed_input = extract_api_features(temp_path)
+        prediction = model.predict(processed_input)
+        
+        prob = float(prediction[0][0])
+        return {
+            "prediction": "Symptomatic" if prob > 0.5 else "Healthy",
+            "confidence": round(prob, 4),
+            "status": "success"
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 if __name__ == "__main__":
     import uvicorn
-    # Change 127.0.0.1 to 0.0.0.0
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
